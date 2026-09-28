@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EchoMorph — Interactive Sonar Payload Model · SIH 2026 PS 26058</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--txt:#e6edf3;--dim:#8b949e;
+--acc:#58a6ff;--grn:#3fb950;--amb:#d29922;--red:#f85149;--vio:#bc8cff;--navy:#204070}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,Arial,sans-serif;padding:14px;max-width:1280px;margin:0 auto}
+h1{font-size:1.15rem} .sub{color:var(--dim);font-size:.78rem;margin-top:2px}
+.row{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.ptitle{font-size:.72rem;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+canvas{width:100%;display:block;background:#0a0e13;border:1px solid var(--line);border-radius:6px}
+button{background:#21262d;color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:6px 12px;font-size:.8rem;cursor:pointer}
+button:hover{border-color:var(--acc)} button.on{background:#1c3a5e;border-color:var(--acc);color:#fff}
+button.warn.on{background:#5e2a1c;border-color:var(--red)}
+button.grn.on{background:#0f3d22;border-color:var(--grn);color:#fff}
+.hdr{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.sl{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:.8rem}
+.sl label{width:132px;color:var(--dim);font-size:.74rem}
+.sl input[type=range]{flex:1;accent-color:var(--acc)}
+.sl .v{width:84px;text-align:right;font-variant-numeric:tabular-nums;color:var(--acc);font-size:.78rem}
+.flow{display:flex;gap:5px;align-items:stretch;margin:8px 0 4px}
+.fbx{flex:1;min-width:0;border:1px solid var(--line);border-radius:6px;padding:5px 2px;font-size:.6rem;text-align:center;color:var(--dim);transition:all .15s}
+.fbx b{display:block;font-size:.62rem;color:var(--txt)}
+.fbx.hot{border-color:var(--acc);box-shadow:0 0 10px #58a6ff55;color:var(--acc)}
+.fbx.hotgrn{border-color:var(--grn);box-shadow:0 0 10px #3fb95055;color:var(--grn)}
+.big{font-size:1.7rem;font-weight:700;color:var(--grn);font-variant-numeric:tabular-nums}
+.kv{display:flex;justify-content:space-between;font-size:.78rem;margin:5px 0}
+.kv span:last-child{color:var(--acc);font-variant-numeric:tabular-nums}
+.barbg{height:8px;background:#0a0e13;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.barfill{height:100%;background:var(--grn);width:0%;transition:width .3s}
+.log{font-size:.7rem;color:var(--dim);font-family:Consolas,monospace;margin-top:6px;min-height:52px}
+.log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#bist{display:none;position:fixed;inset:0;background:#0d1117ee;z-index:9;align-items:center;justify-content:center}
+#bist .panel{width:420px;text-align:left}
+.bstep{margin:7px 0;font-size:.85rem;color:var(--dim)}
+.bstep.ok{color:var(--grn)} .bstep.bad{color:var(--red)}
+#armdot{width:12px;height:12px;border-radius:50%;background:#555;display:inline-block;margin-right:6px;vertical-align:middle}
+.nosel{user-select:none}
+.footer{color:var(--dim);font-size:.68rem;margin-top:14px;text-align:center}
+</style>
+</head>
+<body>
+<div class="hdr panel">
+  <div>
+    <h1>EchoMorph — Interactive Payload Model</h1>
+    <div class="sub">SIH 2026 · PS 26058 (MoES/NIOT) · Team SILICLASH — offline simulation; all physics from the real architecture. Displays labelled SIMULATED — on the bench these numbers come from the scope + INA219. <b>Measured, not claimed.</b></div>
+  </div>
+  <div class="nosel">
+    <span id="armdot"></span><span id="armtxt" style="font-size:.8rem;color:var(--dim)">OFF</span><br><br>
+    <button id="power" class="grn">⏻ POWER</button>
+    <button id="fault" class="warn">⚠ FAULT INJECT</button>
+  </div>
+</div>
+
+<div class="row">
+  <!-- LEFT: controls -->
+  <div class="panel" style="flex:1.05;min-width:330px">
+    <div class="ptitle">Brain · STM32 — water inputs &amp; mode</div>
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+      <button class="sc" data-s="reef">Clear Shallow Reef</button>
+      <button class="sc" data-s="muddy">Muddy Estuary</button>
+      <button class="sc" data-s="deep">Deep Zone</button>
+      <button id="stir">🌀 Stir sediment</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:4px">
+      <button class="mode on" data-m="MANUAL">MANUAL</button>
+      <button class="mode" data-m="ASSISTED">ASSISTED</button>
+      <button class="mode" data-m="COGNITIVE">COGNITIVE ▸</button>
+    </div>
+    <div class="sl"><label>Centre freq (f₀)</label><input id="f0" type="range" min="100" max="500" value="300"><span class="v" id="f0v"></span></div>
+    <div class="sl"><label>Bandwidth (sweep)</label><input id="bw" type="range" min="0" max="200" value="120"><span class="v" id="bwv"></span></div>
+    <div class="sl"><label>Pulse length</label><input id="len" type="range" min="0.2" max="4" step="0.1" value="1.6"><span class="v" id="lenv"></span></div>
+    <div class="sl"><label>Amplitude</label><input id="amp" type="range" min="5" max="100" value="70"><span class="v" id="ampv"></span></div>
+    <div class="sl"><label>Ping rate</label><input id="pps" type="range" min="1" max="5" value="2"><span class="v" id="ppsv"></span></div>
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      <button class="waveb on" data-w="lfm">LFM chirp</button>
+      <button class="waveb" data-w="geom">Geometric</button>
+      <button class="waveb" data-w="barker">Barker-13</button>
+      <button id="win" class="on">Hann window ✓</button>
+    </div>
+    <div class="sub" style="margin-top:8px">DDS shown at derated 12.5–25 MSPS path (D26) · PS band 100–500 kHz · three knobs = pitch, length, loudness.</div>
+  </div>
+
+  <!-- RIGHT: scope -->
+  <div class="panel" style="flex:1.6;min-width:430px">
+    <div class="ptitle">Judging table · Oscilloscope (time domain)</div>
+    <canvas id="scope" width="820" height="260"></canvas>
+    <div class="flow" id="flow"></div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="panel" style="flex:1.15;min-width:360px">
+    <div class="ptitle">Live FFT — spectrum (the windowing toggle demo)</div>
+    <canvas id="spec" width="660" height="300"></canvas>
+  </div>
+  <div class="panel" style="flex:1;min-width:330px">
+    <div class="ptitle">Water tank · echo loop (scaled 40–200 kHz demo)</div>
+    <canvas id="tank" width="560" height="190"></canvas>
+    <div class="kv"><span>Echo quality (Goertzel score)</span><span id="score">—</span></div>
+    <div class="barbg"><div class="barfill" id="scorebar"></div></div>
+  </div>
+  <div class="panel" style="flex:.9;min-width:280px">
+    <div class="ptitle">INA219 telemetry <span style="color:var(--amb)">SIMULATED</span></div>
+    <div class="kv"><span>Energy per ping</span></div>
+    <div class="big" id="uj">— µJ</div>
+    <div class="kv"><span>Idle → ping draw</span><span id="watt">—</span></div>
+    <div class="kv"><span>Mode</span><span id="tmode">—</span></div>
+    <div class="kv"><span>Ping count</span><span id="cnt">0</span></div>
+    <div class="ptitle" style="margin-top:8px">Event log</div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+<div class="footer">Single-file offline model · no network · Ctrl+S to keep · Rehearsal script: BIST → window toggle → stir sediment in COGNITIVE.</div>
+
+<div id="bist"><div class="panel">
+  <div class="ptitle">SonarBIST — power-on self test</div>
+  <div class="bstep" id="b1">▸ Calibration chirp ~100 kHz → internal loopback…</div>
+  <div class="bstep" id="b2">▸ FFT signature check (shape, flatness)…</div>
+  <div class="bstep" id="b3">▸ Noise floor check…</div>
+  <div class="bstep" id="b4">▸ Arming decision…</div>
+  <div class="bstep" id="b5" style="font-weight:700"></div>
+</div></div>
+
+<script>
+"use strict";
+/* ============ state ============ */
+const S = {on:false, armed:false, fault:false, mode:"MANUAL", wave:"lfm", win:true,
+  f0:300, bw:120, len:1.6, amp:70, pps:2, water:"reef", stir:0,
+  score:0, cnt:0, t:0, lastPing:-9, ghost:null, gwin:null, tw:0, fsa:0, echo:null};
+const WATER = {reef:{name:"CLEAR REEF", pref:430, att:.9, mud:.05},
+  muddy:{name:"MUDDY ESTUARY", pref:130, att:.45, mud:.55},
+  deep:{name:"DEEP ZONE", pref:190, att:.6, mud:.2}};
+/* ============ helpers ============ */
+const $ = id => document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+function log(msg){ const L=$("log"), d=document.createElement("div");
+  d.textContent = new Date().toLocaleTimeString()+"  "+msg;
+  L.prepend(d); while(L.children.length>4) L.removeChild(L.lastChild); }
+function slider(id,key,fmt){ const el=$(id); const f=()=>{S[key]=+el.value; $(id+"v").textContent=fmt(+el.value);};
+  el.addEventListener("input",f); f(); }
+slider("f0","f0",v=>v+" kHz"); slider("bw","bw",v=>"±"+v+" kHz");
+slider("len","len",v=>v.toFixed(1)+" ms"); slider("amp","amp",v=>v+"%");
+slider("pps","pps",v=>v+"/s");
+document.querySelectorAll(".mode").forEach(b=>b.onclick=()=>{
+  S.mode=b.dataset.m; document.querySelectorAll(".mode").forEach(x=>x.classList.toggle("on",x===b));
+  log("mode → "+S.mode);});
+document.querySelectorAll(".waveb").forEach(b=>b.onclick=()=>{
+  S.wave=b.dataset.w; document.querySelectorAll(".waveb").forEach(x=>x.classList.toggle("on",x===b));});
+document.querySelectorAll(".sc").forEach(b=>b.onclick=()=>{
+  S.water=b.dataset.s; if(S.mode!=="MANUAL") assistTo(WATER[S.water].pref,true);
+  log("water → "+WATER[S.water].name);});
+$("win").onclick=()=>{S.win=!S.win;$("win").classList.toggle("on",S.win);
+  $("win").textContent=S.win?"Hann window ✓":"Hann window ✗";};
+$("stir").onclick=()=>{S.stir=1; log("sediment stirred into tank");};
+$("fault").onclick=()=>{S.fault=!S.fault;$("fault").classList.toggle("on",S.fault);};
+$("power").onclick=()=>{ if(!S.on) runBIST(); else {S.on=false;S.armed=false;
+  $("armdot").style.background="#555";$("armtxt").textContent="OFF";$("armtxt").style.color="var(--dim)";
+  sc.clearRect(0,0,820,260); sp.clearRect(0,0,660,300); tk.clearRect(0,0,560,190);}};
+function assistTo(pref,hard){
+  const f=clamp(Math.round(pref),100,500);
+  const apply=()=>{S.f0=f; S.bw=clamp(Math.round(700-f*1.2),40,200);
+    S.len=clamp(+(3.2-(f-100)/160).toFixed(1),.4,3.2); S.amp=clamp(Math.round(55+(500-f)/8),55,95);
+    ["f0","bw","len","amp"].forEach(k=>{ $(k).value=S[k]; $(k).dispatchEvent(new Event("input")); });
+    log("brain re-tuned → f₀ "+S.f0+" kHz, "+S.len.toFixed(1)+" ms, A "+S.amp+"%");};
+  if(hard || Math.abs(S.f0-f)>15) apply();
+}
+/* ============ BIST ============ */
+function runBIST(){
+  const B=$("bist"); B.style.display="flex";
+  ["b1","b2","b3","b4","b5"].forEach(i=>{$(i).className="bstep";});
+  $("b1").textContent="▸ Calibration chirp ~100 kHz → internal loopback…";
+  $("b2").textContent="▸ FFT signature check (shape, flatness)…";
+  $("b3").textContent="▸ Noise floor check…"; $("b4").textContent="▸ Arming decision…"; $("b5").textContent="";
+  const steps=[["b1","✔ chirp captured via loopback",420,true],["b2","✔ FFT signature within tolerance",640,false],
+    ["b3","✔ noise floor normal",420,false],["b4","✔ decision logic OK",300,false]];
+  let t=200, failed=false;
+  steps.forEach(([i,ok,d,mayfail])=>{ setTimeout(()=>{
+      if(mayfail&&S.fault&&!failed){ failed=true;
+        $(i).className="bstep bad"; $(i).textContent="✘ ANALOG FILTER STAGE — flatness out of tolerance"; }
+      else if(!failed){ $(i).className="bstep ok"; $(i).textContent=ok; } },t); t+=d; });
+  setTimeout(()=>{ const b5=$("b5");
+    if(failed){ b5.className="bstep bad";
+      b5.textContent="✘ BIST FAIL — payload NOT armed. Spare analog board ready.";
+      log("BIST FAIL → named stage: analog filter"); }
+    else { b5.className="bstep ok"; b5.textContent="✔ BIST PASS — payload ARMED.";
+      S.on=true; S.armed=true; $("armdot").style.background="var(--grn)";
+      $("armtxt").textContent="ARMED"; $("armtxt").style.color="var(--grn)"; log("BIST PASS → armed"); }
+    setTimeout(()=>{ B.style.display="none"; },1700);
+  },t+350);
+}
+/* ============ waveform engine (adaptive timebase — v2) ============
+   Tw = analysis window seconds, always ≥ 1.25 × pulse length AND wide enough that the
+   sampling rate keeps Nyquist (≥ 2.2 × f1). N = 8192 (radix-2), 30 fps trivial in JS. */
+let N = 8192;
+let X = new Float64Array(N);
+const BARK = [1,1,1,1,1,-1,-1,1,1,-1,1,-1,1];
+function engine(winOverride){
+  const winSet = (winOverride===undefined) ? S.win : winOverride;
+  const f0=S.f0*1e3, f1=(S.f0+S.bw)*1e3, A=S.amp/100, T=S.len/1e3;
+  const Tw = 1.35*T;                                   // pulse fills ~74% of window
+  const Nneed = 2.2*f1*Tw;                             // samples needed for Nyquist
+  if(Nneed > N){ N = 1<<Math.ceil(Math.log2(Nneed)); X = new Float64Array(N); }
+  const fsa = N/Tw;                                    // always ≥ 2.2 × f1
+  S.tw=Tw; S.fsa=fsa;
+  const t0 = 0.05*Tw;                                  // small pre-roll for perspective
+  for(let i=0;i<N;i++){
+    const t = i/fsa - t0;
+    if(t<0 || t>T){ X[i]=0; continue; }
+    const u=t/T; let ph;
+    if(S.wave==="lfm"){ const k=(f1-f0)/T; ph=2*Math.PI*(f0*t+k*t*t/2); }
+    else if(S.wave==="geom"){ const r=Math.max(f1/f0,1.0001); ph=2*Math.PI*f0*T*(Math.pow(r,u)-1)/Math.log(r); }
+    else { const c=BARK[Math.min(12,Math.floor(u*13))]; ph=2*Math.PI*f0*t+(c<0?Math.PI:0); }
+    const w = winSet ? 0.5*(1-Math.cos(2*Math.PI*u)) : 1;
+    X[i]=A*w*Math.sin(ph);
+  }
+}
+/* fft (radix-2, in-place) */
+function fftre(re,im){ const n=re.length;
+  for(let i=1,j=0;i<n;i++){ let b=n>>1; for(;j&b;b>>=1) j^=b; j^=b;
+    if(i<j){ const tr=re[i];re[i]=re[j];re[j]=tr; const ti=im[i];im[i]=im[j];im[j]=ti; } }
+  for(let s=2;s<=n;s<<=1){ const an=-2*Math.PI/s, wr=Math.cos(an), wi=Math.sin(an), h=s>>1;
+    for(let i=0;i<n;i+=s){ let c1=1,c2=0;
+      for(let j=0;j<h;j++){
+        const ur=re[i+j], ui=im[i+j];
+        const vr=re[i+j+h]*c1-im[i+j+h]*c2, vi=re[i+j+h]*c2+im[i+j+h]*c1;
+        re[i+j]=ur+vr; im[i+j]=ui+vi; re[i+j+h]=ur-vr; im[i+j+h]=ui-vi;
+        const t1=c1*wr-c2*wi; c2=c1*wi+c2*wr; c1=t1; } } }
+}
+/* ============ drawing ============ */
+const sc=$("scope").getContext("2d"), sp=$("spec").getContext("2d"), tk=$("tank").getContext("2d");
+function drawScope(){
+  const W=820,H=260; sc.clearRect(0,0,W,H);
+  sc.strokeStyle="#21262d"; sc.lineWidth=1;
+  for(let g=0;g<=8;g++){ sc.beginPath(); sc.moveTo(0,g*H/8); sc.lineTo(W,g*H/8); sc.stroke(); }
+  for(let g=0;g<=10;g++){ sc.beginPath(); sc.moveTo(g*W/10,0); sc.lineTo(g*W/10,H); sc.stroke(); }
+  sc.strokeStyle="#30363d"; sc.beginPath(); sc.moveTo(0,H/2); sc.lineTo(W,H/2); sc.stroke();
+  sc.strokeStyle="#58a6ff"; sc.lineWidth=1.6; sc.beginPath();
+  for(let i=0;i<N;i++){ const px=i/N*W, py=H/2-X[i]*H*0.42; i?sc.lineTo(px,py):sc.moveTo(px,py); }
+  sc.stroke();
+  sc.fillStyle="#8b949e"; sc.font="11px Segoe UI";
+  sc.fillText(`${S.wave.toUpperCase()} · f₀ ${Math.round(S.f0)} → ${Math.round(S.f0+S.bw)} kHz · ${S.len.toFixed(1)} ms · A ${S.amp}% · window ${S.win?"ON":"OFF"} · sweep window ${(S.tw*1e3).toFixed(1)} ms`,10,16);
+  sc.fillText("CH1 · BNC out of AD8056 stage",W-190,H-8);
+}
+function drawSpec(){
+  /* capture spectrum of the X buffer currently in memory */
+  const specOf=()=>{
+    const re=Array.from(X), im=new Array(N).fill(0); fftre(re,im);
+    const fperbin=S.fsa/N;                       // Hz per bin
+    const fshow=Math.min(1.05e6,S.fsa*0.45);     // top of axis
+    const MAX=Math.floor(fshow/fperbin);
+    const mags=new Array(MAX);
+    for(let i=0;i<MAX;i++){ const m=Math.hypot(re[i],im[i])/(N/2); mags[i]=20*Math.log10(m+1e-9); }
+    return {mags,MAX,fperbin,fshow};
+  };
+  const cur = specOf();                 // X holds S.win state (loop ran engine() already)
+  engine(!S.win); const alt = specOf(); // the OTHER window state, same pulse
+  engine(S.win);                        // restore X for downstream consumers
+  const W=660,H=300, MAX=cur.MAX, fperbin=cur.fperbin, fshow=cur.fshow;
+  sp.clearRect(0,0,W,H);
+  sp.strokeStyle="#21262d"; for(let g=0;g<=5;g++){ sp.beginPath(); sp.moveTo(0,g*H/5); sp.lineTo(W,g*H/5); sp.stroke(); }
+  const plot=(arr,col,alpha,lw)=>{ sp.strokeStyle=col; sp.globalAlpha=alpha; sp.lineWidth=lw||1.6; sp.beginPath();
+    for(let i=0;i<MAX;i++){ const v=arr[i]; if(v==null) continue;
+      const db=clamp(v,-90,5); const px=i/MAX*W, py=(-db/90)*(H-24);
+      i?sp.lineTo(px,py):sp.moveTo(px,py); }
+    sp.stroke(); sp.globalAlpha=1; sp.lineWidth=1; };
+  /* ALWAYS-COMPARE (D48): red = window OFF (sidelobe mess) · green = window ON (clean),
+     thick stroke = current setting. Both painted every frame in BOTH states — the old
+     "red ghost" was drawn beneath green and vanished when the old state was the clean one. */
+  const mOn  = S.win ? cur.mags : alt.mags;
+  const mOff = S.win ? alt.mags : cur.mags;
+  if(S.win){ plot(mOff,"#f85149",0.55,1.6); plot(mOn,"#3fb950",1,2.2); }
+  else     { plot(mOn,"#3fb950",0.55,1.6); plot(mOff,"#f85149",1,2.2); }
+  sp.fillStyle="#8b949e"; sp.font="11px Segoe UI";
+  [0,100,300,500,700].forEach(f=>{ const px=(f*1e3/fperbin)/MAX*W; if(px<W-20){ sp.fillText(f+"k",px-8,H-6); } });
+  if(700e3<fshow){ const fx=(700e3/fperbin)/MAX*W;
+    sp.strokeStyle="#d2992266"; sp.beginPath(); sp.moveTo(fx,0); sp.lineTo(fx,H-24); sp.stroke();
+    sp.fillStyle="#d29922"; sp.fillText("LC fc≈700 kHz",Math.min(fx+4,W-86),14); }
+  sp.fillStyle="#8b949e"; sp.fillText("0 dB",6,14); sp.fillText("−90 dB",6,H-30);
+  sp.fillStyle="#8b949e"; sp.fillText("red = window OFF · green = window ON · thick = your setting",W-270,14);
+}
+/* ============ telemetry & cognitive ============ */
+function doPing(){
+  const w=WATER[S.water]; S.cnt++; $("cnt").textContent=S.cnt;
+  const E=Math.pow(S.amp/100,2)*S.len*(S.f0/100)*25;
+  $("uj").textContent=E.toFixed(1)+" µJ";
+  $("watt").textContent="12 mA → "+(20+E/Math.max(S.len,.2)*8).toFixed(0)+" mA";
+  $("tmode").textContent=S.mode+" · "+w.name;
+  const mud=w.mud+S.stir*0.35; S.stir*=0.94;
+  const sc_=clamp(100-Math.abs(S.f0-w.pref)/w.pref*120-mud*60-Math.random()*8,5,99);
+  S.score=sc_;
+  $("score").textContent=sc_.toFixed(0)+" / 100";
+  $("scorebar").style.width=sc_+"%";
+  $("scorebar").style.background=sc_>75?"var(--grn)":sc_>45?"var(--amb)":"var(--red)";
+  if(S.mode==="COGNITIVE"){
+    if(sc_<60){ assistTo(w.pref,false); }
+    else if(sc_>88 && Math.abs(S.f0-w.pref)>80){ assistTo(clamp(w.pref+40,100,500),false); }
+  }
+}
+function drawTank(){
+  const W=560,H=190; tk.clearRect(0,0,W,H);
+  const w=WATER[S.water];
+  tk.fillStyle="#0c2438"; tk.fillRect(20,30,W-40,H-60);
+  tk.strokeStyle="#30363d"; tk.strokeRect(20,30,W-40,H-60);
+  tk.fillStyle="#8b949e"; tk.font="11px Segoe UI";
+  tk.fillText("water · "+w.name+(S.stir>0.2?" + SEDIMENT CLOUD":""),26,24);
+  if(w.mud+S.stir*0.35>0.25){ tk.fillStyle="rgba(210,153,34,0.18)";
+    for(let i=0;i<40;i++){ const px=30+((i*53)%(W-70)), py=45+((i*37)%(H-90)); tk.fillRect(px,py,3,3); } }
+  tk.fillStyle="#58a6ff"; tk.beginPath(); tk.moveTo(30,H/2-16); tk.lineTo(30,H/2+16); tk.lineTo(46,H/2); tk.closePath(); tk.fill();
+  tk.fillStyle="#3fb950"; tk.beginPath(); tk.moveTo(W-30,H/2-16); tk.lineTo(W-30,H/2+16); tk.lineTo(W-46,H/2); tk.closePath(); tk.fill();
+  tk.fillStyle="#8b949e"; tk.fillText("TX",18,H/2-22); tk.fillText("RX",W-34,H/2-22);
+  const cyc=1/S.pps, ph=(S.t%cyc)/cyc;
+  if(S.armed && ph<0.5){ const px=46+ph/0.5*(W-92);
+    tk.strokeStyle="#58a6ff"; tk.lineWidth=2; tk.beginPath();
+    for(let i=0;i<30;i++){ const py=H/2+Math.sin(i/30*Math.PI*6)*14*(1-i/30);
+      i?tk.lineTo(px-30+i,py):tk.moveTo(px-30+i,py); } tk.stroke(); tk.lineWidth=1; }
+  if(S.armed && ph>=0.5){ const px=(W-46)-(ph-0.5)/0.5*(W-92)*w.att;
+    tk.strokeStyle="#3fb950aa"; tk.lineWidth=2; tk.beginPath();
+    for(let i=0;i<26;i++){ const py=H/2+Math.sin(i/26*Math.PI*6)*9*w.att*(1-i/26);
+      i?tk.lineTo(px-26+i,py):tk.moveTo(px-26+i,py); } tk.stroke(); tk.lineWidth=1; }
+  tk.fillStyle="#8b949e"; tk.fillText("scaled 40–200 kHz · principle demo",20,H-8);
+}
+/* ============ flow map ============ */
+const FLOW=[["DIALS","/ SENSORS"],["STM32","BRAIN"],["FPGA","DDS"],["HANN","×"],["AD9708","DAC"],["LC","700k"],["OP-AMP","·"],["BNC","→ SCOPE"],["GOERTZEL","score"],["RE-TUNE","loop"]];
+const FF=$("flow");
+const fcells=FLOW.map(f=>{ const d=document.createElement("div"); d.className="fbx";
+  d.innerHTML="<b>"+f[0]+"</b>"+f[1]; FF.appendChild(d); return d; });
+function flowTick(){
+  const cyc=1/S.pps, ph=(S.t%cyc)/cyc, idx=Math.floor(ph*8);
+  fcells.forEach((c,i)=>{ c.className="fbx";
+    if(S.armed && i===idx) c.className="fbx hot";
+    if(S.armed && S.mode==="COGNITIVE" && i===8 && S.score) c.className="fbx hot";
+    if(S.armed && S.mode==="COGNITIVE" && i===9 && S.score<60) c.className="fbx hotgrn"; });
+}
+/* ============ main loop ============ */
+function loop(){
+  S.t+=1/30;
+  if(S.armed){
+    engine(); drawScope(); drawSpec(); drawTank(); flowTick();
+    if(S.t-S.lastPing>=1/S.pps){ S.lastPing=S.t; doPing(); }
+  } else {
+    sc.clearRect(0,0,820,260); sc.fillStyle="#8b949e"; sc.font="14px Segoe UI";
+    sc.fillText("Payload OFF — press ⏻ POWER to run SonarBIST",250,130);
+    sp.clearRect(0,0,660,300); tk.clearRect(0,0,560,190);
+  }
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
